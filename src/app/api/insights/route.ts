@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { generateText } from 'ai'
 import { format, subDays, startOfWeek } from 'date-fns'
 
 export async function POST() {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   try {
+    const google = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! })
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
@@ -47,13 +48,10 @@ export async function POST() {
       note: c.note,
     }))
 
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [
-        {
-          role: 'user',
-          content: `You are Valerie, a warm AI health companion for women in menopause.
+    const { text: content } = await generateText({
+      model: google('gemini-2.0-flash'),
+      maxTokens: 200,
+      prompt: `You are Valerie, a warm AI health companion for women in menopause.
 
 Based on this week's check-in data, write ONE warm, specific, actionable insight in 2-3 sentences.
 Focus on a real pattern you see. Be empathetic and human, not clinical.
@@ -64,11 +62,7 @@ Check-in data:
 ${JSON.stringify(checkInSummary, null, 2)}
 
 Write the insight only. No label, no intro, just the insight.`,
-        },
-      ],
     })
-
-    const content = message.content[0].type === 'text' ? message.content[0].text : ''
 
     // Save insight
     const { data: insight } = await supabase
